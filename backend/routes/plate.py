@@ -6,7 +6,6 @@ import cv2
 import uuid
 
 from backend.ai.plate_detector import plate_detector
-from backend.ai.ocr_engine import ocr_engine
 from backend.database.connection import SessionLocal
 from backend.models.detection import Detection
 from backend.utils.responses import success_response
@@ -28,6 +27,7 @@ router = APIRouter(
 
 UPLOAD_FOLDER = "backend/uploads"
 OUTPUT_FOLDER = "backend/outputs"
+
 
 os.makedirs(
     UPLOAD_FOLDER,
@@ -56,11 +56,11 @@ ALLOWED_EXTENSIONS = {
 # DETECTION SETTINGS
 # ============================================================
 
-# Very weak YOLO detections are usually false detections.
-# Only detections above this confidence will go to OCR.
+# Minimum YOLO plate detection confidence
 MIN_PLATE_CONFIDENCE = 0.40
 
-# Maximum number of plate detections to process.
+
+# Maximum number of plates to process
 MAX_PLATES_TO_PROCESS = 3
 
 
@@ -172,7 +172,27 @@ async def detect_plate(
 
 
         # ====================================================
-        # 4. YOLO PLATE DETECTION
+        # 4. PLATE DETECTION + OCR
+        # ====================================================
+        #
+        # IMPORTANT:
+        #
+        # plate_detector.detect()
+        #
+        # already performs:
+        #
+        # Image
+        #    ↓
+        # YOLO Plate Detection
+        #    ↓
+        # Plate Crop
+        #    ↓
+        # PaddleOCR
+        #    ↓
+        # Plate Number
+        #
+        # So OCR is NOT called again here.
+        #
         # ====================================================
 
         try:
@@ -222,7 +242,9 @@ async def detect_plate(
                 message="No number plate detected.",
 
                 data={
+
                     "total_plates": 0,
+
                     "plates": []
                 }
             )
@@ -251,9 +273,9 @@ async def detect_plate(
             )
 
 
-            # -----------------------------------------------
-            # Ignore weak detection
-            # -----------------------------------------------
+            # ------------------------------------------------
+            # Ignore weak detections
+            # ------------------------------------------------
 
             if confidence < MIN_PLATE_CONFIDENCE:
 
@@ -271,16 +293,18 @@ async def detect_plate(
 
 
         # ====================================================
-        # 7. SORT BY CONFIDENCE
+        # 7. SORT BY DETECTION CONFIDENCE
         # ====================================================
 
         strong_detections.sort(
+
             key=lambda x: float(
                 x.get(
                     "confidence",
                     0.0
                 )
             ),
+
             reverse=True
         )
 
@@ -324,14 +348,16 @@ async def detect_plate(
                 ),
 
                 data={
+
                     "total_plates": 0,
+
                     "plates": []
                 }
             )
 
 
         # ====================================================
-        # 10. PROCESS EACH STRONG PLATE
+        # 10. PROCESS EACH PLATE
         # ====================================================
 
         final_results = []
@@ -352,7 +378,7 @@ async def detect_plate(
 
 
             # =================================================
-            # GET YOLO CONFIDENCE
+            # YOLO DETECTION CONFIDENCE
             # =================================================
 
             plate_confidence = float(
@@ -370,132 +396,78 @@ async def detect_plate(
 
 
             # =================================================
-            # GET CROPPED PLATE IMAGE PATH
+            # PLATE IMAGE PATH
             # =================================================
 
             plate_image_path = plate.get(
-                "image_path"
+                "image_path",
+                ""
             )
 
 
-            if not plate_image_path:
-
-                print(
-                    "[plate route] No image_path "
-                    "returned by plate detector."
-                )
-
-                continue
-
-
             # =================================================
-            # CHECK CROP EXISTS
+            # CHECK PLATE CROP
             # =================================================
 
-            if not os.path.exists(
-                plate_image_path
-            ):
+            if plate_image_path:
 
-                print(
-                    "[plate route] Crop does not exist:"
-                )
-
-                print(
+                if os.path.exists(
                     plate_image_path
-                )
+                ):
 
-                continue
-
-
-            # =================================================
-            # READ PLATE CROP
-            # =================================================
-
-            plate_image = cv2.imread(
-                plate_image_path
-            )
-
-
-            if plate_image is None:
-
-                print(
-                    "[plate route] Unable to read "
-                    "plate crop:"
-                )
-
-                print(
-                    plate_image_path
-                )
-
-                continue
-
-
-            print(
-                f"[plate route] Plate crop size: "
-                f"{plate_image.shape[1]} x "
-                f"{plate_image.shape[0]}"
-            )
-
-
-            # =================================================
-            # OCR
-            # =================================================
-
-            try:
-
-                print(
-                    "[plate route] Starting OCR..."
-                )
-
-
-                ocr_result = (
-                    ocr_engine.read_plate(
-                        plate_image
+                    print(
+                        "[plate route] Plate crop exists:"
                     )
-                )
 
+                    print(
+                        plate_image_path
+                    )
 
-            except Exception as ocr_error:
+                else:
 
-                print(
-                    "[plate route] OCR ERROR:",
-                    ocr_error
-                )
+                    print(
+                        "[plate route] WARNING: "
+                        "Plate crop not found:"
+                    )
 
-
-                ocr_result = {
-
-                    "plate_number":
-                        "Not Recognized",
-
-                    "confidence":
-                        0.0,
-
-                    "raw":
-                        []
-                }
+                    print(
+                        plate_image_path
+                    )
 
 
             # =================================================
             # GET OCR RESULT
             # =================================================
+            #
+            # OCR was already performed inside
+            # plate_detector.py.
+            #
+            # So we simply read the result here.
+            #
+            # =================================================
 
-            plate_number = ocr_result.get(
+            plate_number = plate.get(
                 "plate_number",
                 "Not Recognized"
             )
 
 
             ocr_confidence = float(
-                ocr_result.get(
-                    "confidence",
+                plate.get(
+                    "ocr_confidence",
                     0.0
                 )
             )
 
 
+            ocr_raw = plate.get(
+                "ocr_raw",
+                []
+            )
+
+
             # =================================================
-            # CLEAN OCR RESULT
+            # CLEAN PLATE NUMBER
             # =================================================
 
             if not plate_number:
@@ -574,6 +546,16 @@ async def detect_plate(
 
 
             # =================================================
+            # BBOX
+            # =================================================
+
+            bbox = plate.get(
+                "bbox",
+                []
+            )
+
+
+            # =================================================
             # SAVE TO DATABASE
             # =================================================
 
@@ -583,7 +565,9 @@ async def detect_plate(
 
                     detection_type="plate",
 
-                    plate_number=plate_number,
+                    plate_number=(
+                        plate_number
+                    ),
 
                     plate_confidence=(
                         plate_confidence
@@ -603,10 +587,18 @@ async def detect_plate(
                     detection
                 )
 
+
                 db.commit()
+
 
                 db.refresh(
                     detection
+                )
+
+
+                print(
+                    "[plate route] Database record "
+                    "saved successfully."
                 )
 
 
@@ -614,10 +606,12 @@ async def detect_plate(
 
                 db.rollback()
 
+
                 print(
                     "[plate route] DATABASE ERROR:",
                     db_error
                 )
+
 
                 continue
 
@@ -632,10 +626,7 @@ async def detect_plate(
                     detection.id,
 
                 "bbox":
-                    plate.get(
-                        "bbox",
-                        []
-                    ),
+                    bbox,
 
                 "confidence":
                     plate_confidence,
@@ -657,6 +648,9 @@ async def detect_plate(
 
                 "ocr_confidence":
                     ocr_confidence,
+
+                "ocr_raw":
+                    ocr_raw,
 
                 "created_at":
                     str(
@@ -685,7 +679,9 @@ async def detect_plate(
                 ),
 
                 data={
+
                     "total_plates": 0,
+
                     "plates": []
                 }
             )
@@ -745,6 +741,7 @@ async def detect_plate(
     except Exception as e:
 
         db.rollback()
+
 
         print(
             "======================================"

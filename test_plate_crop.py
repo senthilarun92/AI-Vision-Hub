@@ -1,49 +1,83 @@
-from ultralytics import YOLO
 import cv2
+import os
 
-MODEL_PATH = r"C:\Users\senth\Downloads\best.pt"
-IMAGE_PATH = r"backend\uploads\f33d0d9bdeb244b1a632dd15bb26548b.jpg"
+IMAGE_PATH = "backend/uploads/ac4a268e74064f75b500aaae820e9f33.jpg"
 
-model = YOLO(MODEL_PATH)
+OUTPUT_PATH = "backend/uploads/plate_test_crop.jpg"
+LARGE_OUTPUT_PATH = "backend/uploads/plate_test_crop_large.jpg"
 
 image = cv2.imread(IMAGE_PATH)
 
 if image is None:
-    print("Image not found!")
+    print("❌ Image not found")
     exit()
 
-h, w = image.shape[:2]
-print("Original:", w, "x", h)
+print("=" * 60)
+print("NUMBER PLATE MANUAL CROP TEST")
+print("=" * 60)
 
-# Plate area crop
-crop = image[250:600, 150:950]
+print("\nOriginal image size")
+print("-" * 60)
+print("Width :", image.shape[1])
+print("Height:", image.shape[0])
 
-cv2.imwrite("backend/outputs/plate_crop.jpg", crop)
+# -------------------------------------------------
+# MANUAL CROP
+# -------------------------------------------------
 
-print("Crop saved")
+# Full number plate area
+x1 = 180
+y1 = 650
+x2 = 470
+y2 = 850
 
-results = model.predict(
-    source=crop,
-    conf=0.25,
-    imgsz=640,
-    iou=0.45,
-    max_det=10,
-    verbose=True
+crop = image[y1:y2, x1:x2]
+
+if crop.size == 0:
+    print("❌ Invalid crop coordinates")
+    exit()
+
+# -------------------------------------------------
+# SAVE ORIGINAL CROP
+# -------------------------------------------------
+
+cv2.imwrite(OUTPUT_PATH, crop)
+
+# -------------------------------------------------
+# CREATE ENLARGED PREVIEW
+# -------------------------------------------------
+
+large_crop = cv2.resize(
+    crop,
+    None,
+    fx=3,
+    fy=3,
+    interpolation=cv2.INTER_CUBIC
 )
 
-result = results[0]
+cv2.imwrite(LARGE_OUTPUT_PATH, large_crop)
 
-print("==============================")
-print("TOTAL BOXES:", len(result.boxes))
-print("==============================")
+print("\n" + "=" * 60)
+print("CROP CREATED SUCCESSFULLY")
+print("=" * 60)
 
-for i, box in enumerate(result.boxes):
-    print(
-        "Box", i + 1,
-        "confidence =", float(box.conf[0]),
-        "bbox =", box.xyxy[0].tolist()
-    )
+print("Crop coordinates")
+print("-" * 60)
+print("x1 :", x1)
+print("y1 :", y1)
+print("x2 :", x2)
+print("y2 :", y2)
 
-result.save(filename="backend/outputs/plate_crop_result.jpg")
+print("\nCrop size")
+print("-" * 60)
+print("Width :", crop.shape[1])
+print("Height:", crop.shape[0])
 
-print("Result saved")
+print("\nSaved files")
+print("-" * 60)
+print("Crop       :", OUTPUT_PATH)
+print("Large crop :", LARGE_OUTPUT_PATH)
+
+print("\n" + "=" * 60)
+print("CROP TEST COMPLETED")
+print("=" * 60)
