@@ -57,7 +57,7 @@ ALLOWED_EXTENSIONS = {
 # ============================================================
 
 # Minimum YOLO plate detection confidence
-MIN_PLATE_CONFIDENCE = 0.40
+MIN_PLATE_CONFIDENCE = 0.15
 
 
 # Maximum number of plates to process

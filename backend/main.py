@@ -25,11 +25,8 @@ app = FastAPI(
 # =========================================================
 # CORS
 # =========================================================
-# NOTE: allow_origins=["*"] + allow_credentials=False.
-# This is a student project frontend using plain fetch() with a
-# Bearer token (no cookies), so we don't need credentialed CORS —
-# and "*" avoids CORS headaches when the frontend is opened from
-# different local dev setups (Live Server, file://, different ports).
+# Student project frontend using plain fetch() with Bearer token.
+# No cookies are used, so credentialed CORS is not required.
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,10 +40,6 @@ app.add_middleware(
 # =========================================================
 # GLOBAL ERROR HANDLING
 # =========================================================
-# Every error — validation, HTTPException, or an unexpected crash —
-# comes back as the SAME JSON shape: {"success": false, "message": "..."}.
-# The frontend never has to guess the error format, and Python stack
-# traces are never leaked to the browser.
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc: HTTPException):
@@ -59,9 +52,12 @@ async def http_exception_handler(request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request, exc: Exception):
     print("UNHANDLED ERROR:", repr(exc))
+
     return JSONResponse(
         status_code=500,
-        content=error_response("Internal server error. Please try again.")
+        content=error_response(
+            "Internal server error. Please try again."
+        )
     )
 
 
@@ -70,6 +66,7 @@ async def unhandled_exception_handler(request, exc: Exception):
 # =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent
+
 OUTPUTS_DIR = BASE_DIR / "outputs"
 UPLOADS_DIR = BASE_DIR / "uploads"
 
@@ -80,7 +77,8 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 # =========================================================
 # STATIC OUTPUT IMAGES
 # =========================================================
-# Browser-accessible at: http://127.0.0.1:8000/outputs/<filename>
+# Browser-accessible:
+# http://127.0.0.1:8000/outputs/<filename>
 
 app.mount(
     "/outputs",
@@ -108,6 +106,12 @@ from backend.routes import history
 from backend.routes import analytics
 from backend.routes import auth
 from backend.routes import dashboard
+from backend.routes import anpr
+
+
+# =========================================================
+# INCLUDE ROUTERS
+# =========================================================
 
 app.include_router(vehicle.router)
 app.include_router(plate.router)
@@ -116,9 +120,12 @@ app.include_router(analytics.router)
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 
+# ANPR
+app.include_router(anpr.router)
+
 
 # =========================================================
-# ROOT + HEALTH
+# ROOT
 # =========================================================
 
 @app.get("/")
@@ -128,6 +135,10 @@ def root():
         "status": "success"
     }
 
+
+# =========================================================
+# HEALTH CHECK
+# =========================================================
 
 @app.get("/health")
 def health():
