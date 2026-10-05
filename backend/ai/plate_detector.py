@@ -2,6 +2,7 @@ from ultralytics import YOLO
 import cv2
 import os
 import uuid
+import time
 
 from backend.ai.ocr_engine import ocr_engine
 
@@ -111,6 +112,12 @@ class PlateDetector:
 
         try:
 
+            # ----------------------------------------------------
+            # START PLATE YOLO TIMER
+            # ----------------------------------------------------
+
+            plate_yolo_start = time.perf_counter()
+
             results = self.model.predict(
 
                 source=image,
@@ -124,6 +131,20 @@ class PlateDetector:
                 max_det=10,
 
                 verbose=False
+            )
+
+            # ----------------------------------------------------
+            # END PLATE YOLO TIMER
+            # ----------------------------------------------------
+
+            plate_yolo_time = (
+                time.perf_counter()
+                - plate_yolo_start
+            )
+
+            print(
+                f"[plate_detector] Plate YOLO detection time: "
+                f"{plate_yolo_time:.2f} seconds"
             )
 
         except Exception as e:

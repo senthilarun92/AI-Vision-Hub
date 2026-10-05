@@ -1,6 +1,7 @@
 import re
 import cv2
 import numpy as np
+import time
 from paddleocr import PaddleOCR
 
 
@@ -436,6 +437,12 @@ class OCREngine:
         version_name
     ):
 
+        # ----------------------------------------------------
+        # START TIMER
+        # ----------------------------------------------------
+
+        start_time = time.perf_counter()
+
         try:
 
             print(
@@ -461,14 +468,32 @@ class OCREngine:
                     current
                 )
 
+            # ------------------------------------------------
+            # END TIMER
+            # ------------------------------------------------
+
+            elapsed = time.perf_counter() - start_time
+
+            print(
+                f"[ocr_engine] {version_name} time: "
+                f"{elapsed:.2f} seconds"
+            )
+
             return extracted
 
         except Exception as e:
+
+            elapsed = time.perf_counter() - start_time
 
             print(
                 f"[ocr_engine] "
                 f"{version_name} ERROR:",
                 str(e)
+            )
+
+            print(
+                f"[ocr_engine] {version_name} time: "
+                f"{elapsed:.2f} seconds"
             )
 
             return []
@@ -583,10 +608,6 @@ class OCREngine:
 
         # ----------------------------------------------------
         # State + district + series
-        #
-        # CG07C
-        # KL65L
-        # TN38AB
         # ----------------------------------------------------
 
         match = re.fullmatch(
@@ -614,10 +635,6 @@ class OCREngine:
 
         # ----------------------------------------------------
         # State + district
-        #
-        # CG07
-        # KL65
-        # TN38
         # ----------------------------------------------------
 
         match = re.fullmatch(
@@ -643,9 +660,6 @@ class OCREngine:
 
         # ----------------------------------------------------
         # Number + series
-        #
-        # 65L
-        # 38AB
         # ----------------------------------------------------
 
         match = re.fullmatch(
@@ -666,10 +680,6 @@ class OCREngine:
 
         # ----------------------------------------------------
         # Series + number
-        #
-        # K7276
-        # AB1234
-        # ABC1234
         # ----------------------------------------------------
 
         match = re.fullmatch(
@@ -775,10 +785,6 @@ class OCREngine:
         # ----------------------------------------------------
         # STEP 2
         # Find prefix fragments
-        #
-        # CG07C
-        # KL65L
-        # TN38AB
         # ----------------------------------------------------
 
         prefixes = []
@@ -852,11 +858,6 @@ class OCREngine:
 
                         # ------------------------------------
                         # K7276 case
-                        #
-                        # Prefix = CG07C
-                        # Token = K7276
-                        #
-                        # Final = CG07CK7276
                         # ------------------------------------
 
                         if fragment["type"] == "series_number":
@@ -864,8 +865,6 @@ class OCREngine:
                             series = fragment["series"]
                             number = fragment["number"]
 
-                            # Prefix already has series.
-                            # Add token's series + number.
                             plate = (
                                 prefix["state"]
                                 + prefix["district"]
@@ -900,21 +899,9 @@ class OCREngine:
         if not state:
             return None
 
-        # ----------------------------------------------------
-        # District candidates
-        # ----------------------------------------------------
-
         district_candidates = []
 
-        # ----------------------------------------------------
-        # Series candidates
-        # ----------------------------------------------------
-
         series_candidates = []
-
-        # ----------------------------------------------------
-        # Number candidates
-        # ----------------------------------------------------
 
         number_candidates = []
 
@@ -1002,7 +989,6 @@ class OCREngine:
         # ----------------------------------------------------
 
         if not district_candidates:
-
             return None
 
         # ----------------------------------------------------
@@ -1010,7 +996,6 @@ class OCREngine:
         # ----------------------------------------------------
 
         if not number_candidates:
-
             return None
 
         # ----------------------------------------------------
@@ -1077,7 +1062,6 @@ class OCREngine:
         # ----------------------------------------------------
 
         if not looks_like_plate(plate):
-
             return None
 
         # ----------------------------------------------------
@@ -1175,6 +1159,12 @@ class OCREngine:
 
     def read_plate(self, image):
 
+        # ----------------------------------------------------
+        # TOTAL OCR TIMER
+        # ----------------------------------------------------
+
+        total_start_time = time.perf_counter()
+
         print("=" * 60)
         print(
             "[ocr_engine] START PLATE OCR"
@@ -1200,10 +1190,22 @@ class OCREngine:
         # Preprocess
         # ----------------------------------------------------
 
+        preprocess_start = time.perf_counter()
+
         processed_images = (
             self.preprocess_images(
                 image
             )
+        )
+
+        preprocess_time = (
+            time.perf_counter()
+            - preprocess_start
+        )
+
+        print(
+            f"[ocr_engine] Preprocessing time: "
+            f"{preprocess_time:.2f} seconds"
         )
 
         # ----------------------------------------------------
@@ -1211,6 +1213,8 @@ class OCREngine:
         # ----------------------------------------------------
 
         all_candidates = []
+
+        ocr_start = time.perf_counter()
 
         for (
             version_name,
@@ -1226,11 +1230,35 @@ class OCREngine:
                 results
             )
 
+        total_ocr_engine_time = (
+            time.perf_counter()
+            - ocr_start
+        )
+
+        print(
+            "=" * 60
+        )
+
+        print(
+            f"[ocr_engine] TOTAL OCR inference time: "
+            f"{total_ocr_engine_time:.2f} seconds"
+        )
+
         # ----------------------------------------------------
         # No OCR result
         # ----------------------------------------------------
 
         if not all_candidates:
+
+            total_time = (
+                time.perf_counter()
+                - total_start_time
+            )
+
+            print(
+                f"[ocr_engine] TOTAL OCR process time: "
+                f"{total_time:.2f} seconds"
+            )
 
             return {
                 "plate_number": "Not Recognized",
@@ -1270,11 +1298,28 @@ class OCREngine:
         # Combine
         # ----------------------------------------------------
 
+        combine_start = time.perf_counter()
+
         combined = self.combine_plate_parts(
             valid
         )
 
+        combine_time = (
+            time.perf_counter()
+            - combine_start
+        )
+
+        print(
+            f"[ocr_engine] Plate combination time: "
+            f"{combine_time:.4f} seconds"
+        )
+
         if combined:
+
+            total_time = (
+                time.perf_counter()
+                - total_start_time
+            )
 
             print("=" * 60)
 
@@ -1286,6 +1331,11 @@ class OCREngine:
             print(
                 f"[ocr_engine] FINAL CONFIDENCE: "
                 f"{combined['confidence']:.4f}"
+            )
+
+            print(
+                f"[ocr_engine] TOTAL OCR PROCESS TIME: "
+                f"{total_time:.2f} seconds"
             )
 
             print("=" * 60)
@@ -1327,6 +1377,16 @@ class OCREngine:
                 )
             )
 
+            total_time = (
+                time.perf_counter()
+                - total_start_time
+            )
+
+            print(
+                f"[ocr_engine] TOTAL OCR PROCESS TIME: "
+                f"{total_time:.2f} seconds"
+            )
+
             return {
                 "plate_number": best["text"],
                 "confidence": round(
@@ -1340,9 +1400,19 @@ class OCREngine:
         # Failed
         # ----------------------------------------------------
 
+        total_time = (
+            time.perf_counter()
+            - total_start_time
+        )
+
         print(
             "[ocr_engine] "
             "Plate not confidently recognized."
+        )
+
+        print(
+            f"[ocr_engine] TOTAL OCR PROCESS TIME: "
+            f"{total_time:.2f} seconds"
         )
 
         print("=" * 60)

@@ -4,6 +4,7 @@ import shutil
 import os
 import uuid
 import cv2
+import time
 
 from backend.ai.vehicle_detector import vehicle_detector
 from backend.ai.plate_detector import plate_detector
@@ -63,6 +64,12 @@ async def detect_anpr(
     SQLite Database
     """
 
+    # ========================================================
+    # TOTAL TIMER START
+    # ========================================================
+
+    total_start = time.perf_counter()
+
     db = SessionLocal()
 
     try:
@@ -94,6 +101,8 @@ async def detect_anpr(
         # 2. SAVE UPLOADED IMAGE
         # ========================================================
 
+        upload_start = time.perf_counter()
+
         unique_filename = (
             f"anpr_{uuid.uuid4().hex}"
             f"{extension}"
@@ -114,9 +123,14 @@ async def detect_anpr(
                 buffer
             )
 
+        upload_time = time.perf_counter() - upload_start
+
         print("=" * 60)
         print("[ANPR] Image uploaded successfully")
         print("[ANPR] Image:", image_path)
+        print(
+            f"[ANPR] Upload time: {upload_time:.2f} seconds"
+        )
         print("=" * 60)
 
         # ========================================================
@@ -125,10 +139,17 @@ async def detect_anpr(
 
         try:
 
+            vehicle_start = time.perf_counter()
+
             print("[ANPR] Starting vehicle detection...")
 
             vehicle_result = vehicle_detector.detect(
                 image_path
+            )
+
+            vehicle_time = (
+                time.perf_counter()
+                - vehicle_start
             )
 
             print(
@@ -137,6 +158,11 @@ async def detect_anpr(
                     "total_vehicles",
                     0
                 )
+            )
+
+            print(
+                f"[ANPR] Vehicle detection time: "
+                f"{vehicle_time:.2f} seconds"
             )
 
         except Exception as e:
@@ -153,8 +179,15 @@ async def detect_anpr(
         # 4. LOAD ORIGINAL IMAGE
         # ========================================================
 
+        image_load_start = time.perf_counter()
+
         image = cv2.imread(
             image_path
+        )
+
+        image_load_time = (
+            time.perf_counter()
+            - image_load_start
         )
 
         if image is None:
@@ -166,21 +199,40 @@ async def detect_anpr(
                 )
             )
 
+        print(
+            f"[ANPR] Image loading time: "
+            f"{image_load_time:.2f} seconds"
+        )
+
         # ========================================================
         # 5. PLATE DETECTION + OCR
         # ========================================================
 
         try:
 
-            print("[ANPR] Starting plate detection + OCR...")
+            plate_start = time.perf_counter()
+
+            print(
+                "[ANPR] Starting plate detection + OCR..."
+            )
 
             plate_results = plate_detector.detect(
                 image
             )
 
+            plate_time = (
+                time.perf_counter()
+                - plate_start
+            )
+
             print(
                 "[ANPR] Plates detected:",
                 len(plate_results)
+            )
+
+            print(
+                f"[ANPR] Plate detection + OCR time: "
+                f"{plate_time:.2f} seconds"
             )
 
         except Exception as e:
@@ -196,6 +248,8 @@ async def detect_anpr(
         # ========================================================
         # 6. SAVE VEHICLE RESULTS
         # ========================================================
+
+        vehicle_db_start = time.perf_counter()
 
         vehicle_saved_ids = []
 
@@ -229,9 +283,21 @@ async def detect_anpr(
                 row.id
             )
 
+        vehicle_db_time = (
+            time.perf_counter()
+            - vehicle_db_start
+        )
+
+        print(
+            f"[ANPR] Vehicle database save time: "
+            f"{vehicle_db_time:.2f} seconds"
+        )
+
         # ========================================================
         # 7. SAVE PLATE RESULTS
         # ========================================================
+
+        plate_db_start = time.perf_counter()
 
         plate_saved_ids = []
 
@@ -353,11 +419,33 @@ async def detect_anpr(
                 "plate_image_path": plate_image_path
             })
 
+        plate_db_time = (
+            time.perf_counter()
+            - plate_db_start
+        )
+
+        print(
+            f"[ANPR] Plate database save time: "
+            f"{plate_db_time:.2f} seconds"
+        )
+
         # ========================================================
         # 8. COMMIT DATABASE
         # ========================================================
 
+        database_commit_start = time.perf_counter()
+
         db.commit()
+
+        database_commit_time = (
+            time.perf_counter()
+            - database_commit_start
+        )
+
+        print(
+            f"[ANPR] Final database commit time: "
+            f"{database_commit_time:.2f} seconds"
+        )
 
         # ========================================================
         # 9. FINAL MESSAGE
@@ -388,14 +476,58 @@ async def detect_anpr(
             )
 
         # ========================================================
-        # 10. FINAL RESPONSE
+        # 10. FINAL TIMING
         # ========================================================
+
+        total_time = (
+            time.perf_counter()
+            - total_start
+        )
 
         print("=" * 60)
         print("[ANPR] PROCESS COMPLETED")
         print("[ANPR] Vehicles:", total_vehicles)
         print("[ANPR] Plates:", total_plates)
+
+        print("-" * 60)
+        print(
+            f"[ANPR] Upload time: "
+            f"{upload_time:.2f} seconds"
+        )
+        print(
+            f"[ANPR] Vehicle detection time: "
+            f"{vehicle_time:.2f} seconds"
+        )
+        print(
+            f"[ANPR] Image loading time: "
+            f"{image_load_time:.2f} seconds"
+        )
+        print(
+            f"[ANPR] Plate detection + OCR time: "
+            f"{plate_time:.2f} seconds"
+        )
+        print(
+            f"[ANPR] Vehicle DB save time: "
+            f"{vehicle_db_time:.2f} seconds"
+        )
+        print(
+            f"[ANPR] Plate DB save time: "
+            f"{plate_db_time:.2f} seconds"
+        )
+        print(
+            f"[ANPR] Final DB commit time: "
+            f"{database_commit_time:.2f} seconds"
+        )
+        print("-" * 60)
+        print(
+            f"[ANPR] TOTAL PROCESS TIME: "
+            f"{total_time:.2f} seconds"
+        )
         print("=" * 60)
+
+        # ========================================================
+        # 11. FINAL RESPONSE
+        # ========================================================
 
         return success_response(
 
