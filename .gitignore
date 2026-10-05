@@ -12,7 +12,7 @@ env/
 
 backend/uploads/*
 backend/outputs/*
-backend/weights/*.pt
+
 
 *.db
 *.sqlite3
